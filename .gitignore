@@ -1,0 +1,19 @@
+# Binary
+appoller
+
+# Config files with real tokens
+*.conf
+config.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage.out

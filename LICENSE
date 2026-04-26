@@ -1,0 +1,36 @@
+AlertKick Poller License
+
+Copyright (c) 2024-2026 AlertKick. All rights reserved.
+
+This software and associated documentation files (the "Software") are the
+proprietary property of AlertKick.
+
+Permission is hereby granted to any person or organization with an active
+AlertKick subscription ("Subscriber") to use, copy, and run the Software
+solely for the purpose of connecting to and operating with the AlertKick
+platform as part of the Subscriber's monitoring infrastructure.
+
+The following restrictions apply:
+
+1. The Software may only be used in connection with an active AlertKick
+   account and a valid poller token issued by the AlertKick platform.
+
+2. Modification of the Software is permitted solely for the purpose of
+   integrating with the Subscriber's own infrastructure. Modified versions
+   may not be distributed or made available to third parties.
+
+3. Redistribution, sublicensing, or resale of the Software, whether in
+   original or modified form, is not permitted without prior written
+   consent from AlertKick.
+
+4. The Software may not be used to build or operate a competing monitoring
+   service or product.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ALERTPRIORITY BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For licensing enquiries, contact: support@alertkick.com

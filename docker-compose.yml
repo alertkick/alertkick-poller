@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  appoller:
+    image: alertkick/alertkick-poller:latest
+    restart: unless-stopped
+    ports:
+      - "8089:8089"
+    environment:
+      - AP_POLLER_TOKEN=${AP_POLLER_TOKEN}
+      - AP_API_URL=${AP_API_URL:-https://app.alertkick.com}
+      - AP_POLL_INTERVAL=${AP_POLL_INTERVAL:-60}
+      - AP_MAX_CONCURRENCY=${AP_MAX_CONCURRENCY:-50}
+      - AP_BATCH_SIZE=${AP_BATCH_SIZE:-100}
+      - AP_BATCH_INTERVAL=${AP_BATCH_INTERVAL:-10}
+      - AP_HEALTH_PORT=8089
+      - AP_LOG_LEVEL=${AP_LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8089/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
