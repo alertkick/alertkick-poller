@@ -244,6 +244,13 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				// Liveness beacon: marks the core loop as still iterating so
+				// the watchdog can tell a wedged process from a healthy one.
+				// Poked before the api call so it reflects loop liveness, not
+				// api reachability (the api can be down during a deploy without
+				// the poller being wedged).
+				healthServer.Beat()
+
 				status := "online"
 				resultMu.Lock()
 				queueSize := len(resultBuffer)
@@ -273,6 +280,41 @@ func main() {
 	// Mark as ready
 	healthServer.SetReady(true)
 	log.Printf("[main] poller is ready, health endpoint on :%d", cfg.HealthPort)
+
+	// Liveness watchdog. A wedged poller — every goroutine blocked, e.g. on a
+	// stalled stdout write held under the stdlib log mutex during log-driver
+	// back-pressure — keeps its TCP health server answering, so Docker reports
+	// it "healthy" and restart:unless-stopped never fires; it stays dark until
+	// a manual `docker restart`. The heartbeat loop pokes healthServer.Beat()
+	// each tick; if that beacon goes stale the process is wedged, so exit and
+	// let the supervisor restart us with a fresh stdout pipe. The watchdog
+	// touches only atomics + time + os.Exit, so the same wedge cannot block it.
+	const (
+		watchdogInterval    = 15 * time.Second
+		watchdogLivenessTTL = 120 * time.Second // 4 missed 30s heartbeat ticks
+	)
+	healthServer.SetLivenessTimeout(watchdogLivenessTTL)
+	go func() {
+		t := time.NewTicker(watchdogInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				age := healthServer.LastBeatAge()
+				if age <= watchdogLivenessTTL {
+					continue
+				}
+				// Best-effort log (may itself block if stdout is the wedge),
+				// then exit regardless so recovery never depends on logging.
+				go log.Printf("[watchdog] heartbeat loop stalled for %s (>%s); exiting for supervisor restart",
+					age.Round(time.Second), watchdogLivenessTTL)
+				time.Sleep(2 * time.Second)
+				os.Exit(1)
+			}
+		}
+	}()
 
 	// Wait for shutdown signal
 	<-signals

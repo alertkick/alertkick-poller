@@ -1,15 +1,15 @@
 // Package health exposes the poller's HTTP health surface:
 //
-//   /livez   200 if process alive (no deps probed)
-//   /readyz  200 if all configured deps are reachable, 503 + JSON
-//            details otherwise
-//   /healthz always 200 with rich JSON: status, version, uptime,
-//            per-dep latency, internal counters
-//   /version build metadata only — same JSON shape every alertkick
-//            service exposes so the api can fan in via /api/v1/versions
-//   /metrics legacy JSON metrics (uptime + counters); kept for the
-//            apapi heartbeat path that still consumes it
-//   /ready   legacy boolean readiness gate (kept for back-compat)
+//	/livez   200 if process alive (no deps probed)
+//	/readyz  200 if all configured deps are reachable, 503 + JSON
+//	         details otherwise
+//	/healthz always 200 with rich JSON: status, version, uptime,
+//	         per-dep latency, internal counters
+//	/version build metadata only — same JSON shape every alertkick
+//	         service exposes so the api can fan in via /api/v1/versions
+//	/metrics legacy JSON metrics (uptime + counters); kept for the
+//	         apapi heartbeat path that still consumes it
+//	/ready   legacy boolean readiness gate (kept for back-compat)
 //
 // Probes are inline rather than registry-based — the poller has at most
 // two deps (api + kafka brokers when in kafka mode) so a registry would
@@ -45,6 +45,15 @@ type Server struct {
 	startedAt time.Time
 	ready     atomic.Bool
 
+	// lastBeatNano is poked by the core work loop (the heartbeat loop) via
+	// Beat(). Its age is how /ready and the watchdog detect a wedged process
+	// — every goroutine blocked, e.g. on a stalled stdout write held under
+	// the stdlib log mutex — which the plain "process alive" check can't see.
+	lastBeatNano atomic.Int64
+	// livenessTimeout, when > 0, makes /ready report 503 once the last Beat
+	// is older than this many nanoseconds. 0 disables the staleness check.
+	livenessTimeout atomic.Int64
+
 	build   BuildInfo
 	apiURL  string   // optional — empty disables api probe
 	brokers []string // optional — empty disables kafka probe
@@ -76,9 +85,50 @@ func (s *Server) SetProbeTargets(apiURL string, brokers []string) {
 	s.brokers = brokers
 }
 
-// SetReady marks the poller as ready to serve.
+// SetReady marks the poller as ready to serve. It also seeds the liveness
+// beacon so a freshly-ready poller isn't immediately considered stalled.
 func (s *Server) SetReady(ready bool) {
 	s.ready.Store(ready)
+	if ready {
+		s.Beat()
+	}
+}
+
+// Beat records a liveness tick from the poller's core work loop. The
+// watchdog (and /ready, when a liveness timeout is set) use the age of the
+// last beat to detect a wedged process the alive check would miss.
+func (s *Server) Beat() {
+	s.lastBeatNano.Store(time.Now().UnixNano())
+}
+
+// LastBeatAge returns the time since the last Beat. Returns 0 before the
+// first beat so a just-started poller is never treated as stalled.
+func (s *Server) LastBeatAge() time.Duration {
+	n := s.lastBeatNano.Load()
+	if n == 0 {
+		return 0
+	}
+	return time.Since(time.Unix(0, n))
+}
+
+// SetLivenessTimeout makes /ready report 503 (failing the container health
+// check) once the last Beat is older than d. Pass 0 to disable.
+func (s *Server) SetLivenessTimeout(d time.Duration) {
+	s.livenessTimeout.Store(int64(d))
+}
+
+// stalled reports whether the liveness beacon has gone quiet past the
+// configured timeout. False when the timeout is disabled or no beat yet.
+func (s *Server) stalled() bool {
+	to := s.livenessTimeout.Load()
+	if to <= 0 {
+		return false
+	}
+	n := s.lastBeatNano.Load()
+	if n == 0 {
+		return false
+	}
+	return time.Since(time.Unix(0, n)) > time.Duration(to)
 }
 
 // UptimeSeconds returns the poller uptime in seconds.
@@ -109,7 +159,7 @@ func (s *Server) Start() {
 // --- Legacy back-compat handlers ---
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
-	if s.ready.Load() {
+	if s.ready.Load() && !s.stalled() {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
 	} else {
@@ -121,12 +171,12 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"uptime_seconds":       s.UptimeSeconds(),
-		"ready":                s.ready.Load(),
-		"checks_executed":      s.ChecksExecuted.Load(),
-		"checks_per_minute":    s.ChecksPerMinute.Load(),
-		"errors":               s.Errors.Load(),
-		"queue_depth":          s.QueueDepth.Load(),
+		"uptime_seconds":        s.UptimeSeconds(),
+		"ready":                 s.ready.Load(),
+		"checks_executed":       s.ChecksExecuted.Load(),
+		"checks_per_minute":     s.ChecksPerMinute.Load(),
+		"errors":                s.Errors.Load(),
+		"queue_depth":           s.QueueDepth.Load(),
 		"avg_check_duration_ms": s.AvgCheckDurationMs.Load(),
 	})
 }
@@ -240,17 +290,17 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":              status,
-		"service":             s.build.Service,
-		"version":             s.build.Version,
-		"git_hash":            s.build.GitHash,
-		"git_branch":          s.build.GitBranch,
-		"build_time":          s.build.BuildTime,
-		"uptime":              time.Since(s.startedAt).Round(time.Second).String(),
-		"checks":              results,
-		"checks_executed":     s.ChecksExecuted.Load(),
-		"errors":              s.Errors.Load(),
-		"queue_depth":         s.QueueDepth.Load(),
+		"status":          status,
+		"service":         s.build.Service,
+		"version":         s.build.Version,
+		"git_hash":        s.build.GitHash,
+		"git_branch":      s.build.GitBranch,
+		"build_time":      s.build.BuildTime,
+		"uptime":          time.Since(s.startedAt).Round(time.Second).String(),
+		"checks":          results,
+		"checks_executed": s.ChecksExecuted.Load(),
+		"errors":          s.Errors.Load(),
+		"queue_depth":     s.QueueDepth.Load(),
 	})
 }
 
