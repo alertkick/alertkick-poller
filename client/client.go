@@ -105,6 +105,7 @@ type MonitorAssignment struct {
 	TCPPort                  int               `json:"tcp_port,omitempty"`
 	SSLCertMonitoring        bool              `json:"ssl_cert_monitoring"`
 	SSLCertExpiryAlertDays   *int              `json:"ssl_cert_expiry_alert_days,omitempty"`
+	DomainExpiryAlertDays    *int              `json:"domain_expiry_alert_days,omitempty"`
 	FailureThreshold         int               `json:"failure_threshold"`
 	Location                 string            `json:"location"`
 }
