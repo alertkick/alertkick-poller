@@ -39,7 +39,7 @@ func performTCPCheck(m *client.MonitorAssignment) *Result {
 		return result
 	}
 
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	timeout := time.Duration(m.TimeoutSeconds) * time.Second
 	if timeout == 0 {

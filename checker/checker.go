@@ -38,6 +38,8 @@ func Execute(m *client.MonitorAssignment, tlsInsecure bool) *Result {
 		return performTCPCheck(m)
 	case "ssl":
 		return performSSLCheck(m)
+	case "domain":
+		return performDomainExpiryCheck(m)
 	default:
 		result.Success = false
 		result.ErrorMessage = "unknown monitor type: " + m.MonitorType
