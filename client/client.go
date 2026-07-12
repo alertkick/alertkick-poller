@@ -149,8 +149,9 @@ type CheckResult struct {
 	Success        bool   `json:"success"`
 	StatusCode     int    `json:"status_code,omitempty"`
 	ResponseTimeMs int64  `json:"response_time_ms"`
-	ErrorMessage   string `json:"error_message,omitempty"`
-	ResponseBody   string `json:"response_body,omitempty"`
+	ErrorMessage   string                 `json:"error_message,omitempty"`
+	ResponseBody   string                 `json:"response_body,omitempty"`
+	Details        map[string]interface{} `json:"details,omitempty"`
 }
 
 // SubmitResultsRequest is the batch result submission payload.

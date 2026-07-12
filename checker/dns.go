@@ -102,6 +102,12 @@ func performDNSCheck(m *client.MonitorAssignment) *Result {
 	}
 
 	result.ResponseBody = strings.Join(resolvedAddresses, ", ")
+	// Persisted by the API on the monitor per location so answer changes
+	// (e.g. an A record silently repointed) can be detected and surfaced.
+	result.Details = map[string]interface{}{
+		"record_type": recordType,
+		"resolved":    resolvedAddresses,
+	}
 
 	if m.ExpectedDNSHost != "" {
 		found := false
