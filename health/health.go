@@ -58,12 +58,25 @@ type Server struct {
 	apiURL  string   // optional — empty disables api probe
 	brokers []string // optional — empty disables kafka probe
 
-	// Metrics exposed via /metrics
+	// Metrics exposed via /metrics (Prometheus format, scraped by Alloy).
+	// ChecksPerMinute / AvgCheckDurationMs are legacy heartbeat fields —
+	// rate() and the duration histogram supersede them.
 	ChecksExecuted     atomic.Int64
 	ChecksPerMinute    atomic.Int64
 	Errors             atomic.Int64
 	QueueDepth         atomic.Int64
 	AvgCheckDurationMs atomic.Int64
+
+	// Leader is 1 while this poller holds the location lease.
+	Leader atomic.Int64
+	// Result-sink submission outcomes (batches → individual results).
+	ResultsSubmitted   atomic.Int64
+	ResultSubmitErrors atomic.Int64
+	// CheckDuration observes wall time per executed check; DispatchLag
+	// observes assignment-produced → execution-start latency, which is the
+	// "are checks running in their windows" signal.
+	CheckDuration *Histogram
+	DispatchLag   *Histogram
 }
 
 // NewServer creates a new health server.
@@ -71,6 +84,10 @@ func NewServer(port int) *Server {
 	s := &Server{
 		port:      port,
 		startedAt: time.Now().UTC(),
+		// Check durations: sub-second for DNS/TCP, up to the 120s HTTP ceiling.
+		CheckDuration: NewHistogram(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
+		// Dispatch lag: seconds when healthy; minutes when backlogged or wedged.
+		DispatchLag: NewHistogram(0.1, 0.5, 1, 5, 15, 30, 60, 120, 300, 600),
 	}
 	return s
 }
@@ -141,6 +158,7 @@ func (s *Server) Start() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ready", s.handleReady)
 	mux.HandleFunc("/metrics", s.handleMetrics)
+	mux.HandleFunc("/metrics.json", s.handleMetricsJSON)
 	mux.HandleFunc("/livez", s.handleLivez)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 	mux.HandleFunc("/healthz", s.handleHealthz)
@@ -168,7 +186,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleMetrics serves Prometheus exposition format (scraped by Alloy).
+// The legacy JSON stats moved to /metrics.json.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	s.writePrometheus(w)
+}
+
+func (s *Server) handleMetricsJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"uptime_seconds":        s.UptimeSeconds(),

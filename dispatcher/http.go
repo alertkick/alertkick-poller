@@ -70,7 +70,9 @@ func (d *HTTPDispatcher) Run(ctx context.Context, out chan<- *client.MonitorAssi
 			if d.onQueueDepth != nil {
 				d.onQueueDepth(len(due))
 			}
+			now := time.Now()
 			for _, m := range due {
+				m.ReceivedAt = now
 				select {
 				case <-ctx.Done():
 					return nil
