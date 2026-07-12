@@ -18,6 +18,10 @@ type Result struct {
 	ResponseTimeMs int64
 	ErrorMessage   string
 	ResponseBody   string
+	// Details carries check-type-specific structured data (domain registration
+	// info, resolved DNS answers) that the API persists on the monitor for
+	// display; nil for check types that don't produce any.
+	Details map[string]interface{}
 }
 
 // Execute runs the appropriate check based on monitor type.
@@ -60,5 +64,6 @@ func (r *Result) ToClientResult(pollerUUID string) client.CheckResult {
 		ResponseTimeMs: r.ResponseTimeMs,
 		ErrorMessage:   r.ErrorMessage,
 		ResponseBody:   r.ResponseBody,
+		Details:        r.Details,
 	}
 }
