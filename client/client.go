@@ -108,6 +108,11 @@ type MonitorAssignment struct {
 	DomainExpiryAlertDays    *int              `json:"domain_expiry_alert_days,omitempty"`
 	FailureThreshold         int               `json:"failure_threshold"`
 	Location                 string            `json:"location"`
+
+	// ReceivedAt is stamped by the dispatcher when the assignment arrives
+	// (Kafka message timestamp when available). Execution start minus this
+	// is the dispatch-lag metric; never serialized.
+	ReceivedAt time.Time `json:"-"`
 }
 
 // MonitorAuth holds auth config for a monitor.

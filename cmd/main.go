@@ -101,7 +101,12 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for m := range checkChan {
+				if !m.ReceivedAt.IsZero() {
+					healthServer.DispatchLag.Observe(time.Since(m.ReceivedAt).Seconds())
+				}
+				execStart := time.Now()
 				result := checker.Execute(m, cfg.TLSInsecure)
+				healthServer.CheckDuration.Observe(time.Since(execStart).Seconds())
 				healthServer.ChecksExecuted.Add(1)
 				if !result.Success {
 					healthServer.Errors.Add(1)
@@ -167,7 +172,7 @@ func main() {
 				case <-lctx.Done():
 					return
 				case <-ticker.C:
-					flushResults(lctx, sink, pollerUUID, &resultMu, &resultBuffer)
+					flushResults(lctx, sink, pollerUUID, &resultMu, &resultBuffer, healthServer)
 				}
 			}
 		}()
@@ -190,7 +195,7 @@ func main() {
 		// Final flush of whatever was in the buffer. Use a fresh context —
 		// w.ctx is already canceled.
 		flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		flushResults(flushCtx, w.sink, pollerUUID, &resultMu, &resultBuffer)
+		flushResults(flushCtx, w.sink, pollerUUID, &resultMu, &resultBuffer, healthServer)
 		if err := w.sink.Flush(flushCtx); err != nil {
 			log.Printf("[main] sink flush on step-down: %v", err)
 		}
@@ -220,9 +225,11 @@ func main() {
 			switch state {
 			case leader.StateLeader:
 				log.Printf("[main] role=leader: starting dispatcher and result submitter")
+				healthServer.Leader.Store(1)
 				startLeaderWork()
 			case leader.StateFollower:
 				log.Printf("[main] role=follower: stopping dispatcher and result submitter")
+				healthServer.Leader.Store(0)
 				stopLeaderWork()
 			}
 		}
@@ -404,6 +411,7 @@ func flushResults(
 	pollerUUID string,
 	mu *sync.Mutex,
 	buf *[]client.CheckResult,
+	hs *health.Server,
 ) {
 	mu.Lock()
 	if len(*buf) == 0 {
@@ -418,11 +426,13 @@ func flushResults(
 	stats, err := sink.Submit(ctx, pollerUUID, batch)
 	if err != nil {
 		log.Printf("[main] failed to submit %d results: %v", len(batch), err)
+		hs.ResultSubmitErrors.Add(1)
 		mu.Lock()
 		*buf = append(batch, *buf...)
 		mu.Unlock()
 		return
 	}
+	hs.ResultsSubmitted.Add(int64(len(batch)))
 	log.Printf("[main] submitted %d results (accepted: %d, rejected: %d)",
 		len(batch), stats.Accepted, stats.Rejected)
 }

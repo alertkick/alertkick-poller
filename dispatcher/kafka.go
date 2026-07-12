@@ -59,6 +59,12 @@ func (d *KafkaDispatcher) Run(ctx context.Context, out chan<- *client.MonitorAss
 			log.Printf("[dispatcher/kafka] malformed assignment at offset %d: %v", msg.Offset, err)
 			continue
 		}
+		// Producer timestamp — dispatch lag is measured from when the api
+		// decided the check was due, not from local receipt.
+		m.ReceivedAt = msg.Time
+		if m.ReceivedAt.IsZero() {
+			m.ReceivedAt = time.Now()
+		}
 
 		select {
 		case <-ctx.Done():
