@@ -106,6 +106,7 @@ type MonitorAssignment struct {
 	SSLCertMonitoring        bool              `json:"ssl_cert_monitoring"`
 	SSLCertExpiryAlertDays   *int              `json:"ssl_cert_expiry_alert_days,omitempty"`
 	DomainExpiryAlertDays    *int              `json:"domain_expiry_alert_days,omitempty"`
+	MailRequireDmarcPolicy   string            `json:"mail_require_dmarc_policy,omitempty"`
 	FailureThreshold         int               `json:"failure_threshold"`
 	Location                 string            `json:"location"`
 
@@ -141,14 +142,14 @@ func (c *Client) GetMonitors() ([]MonitorAssignment, error) {
 
 // CheckResult is a single check result to submit.
 type CheckResult struct {
-	MonitorUUID    string `json:"monitor_uuid"`
-	Subdomain      string `json:"subdomain"`
-	Location       string `json:"location"`
-	PollerUUID     string `json:"poller_uuid"`
-	CheckedAt      string `json:"checked_at"` // RFC3339
-	Success        bool   `json:"success"`
-	StatusCode     int    `json:"status_code,omitempty"`
-	ResponseTimeMs int64  `json:"response_time_ms"`
+	MonitorUUID    string                 `json:"monitor_uuid"`
+	Subdomain      string                 `json:"subdomain"`
+	Location       string                 `json:"location"`
+	PollerUUID     string                 `json:"poller_uuid"`
+	CheckedAt      string                 `json:"checked_at"` // RFC3339
+	Success        bool                   `json:"success"`
+	StatusCode     int                    `json:"status_code,omitempty"`
+	ResponseTimeMs int64                  `json:"response_time_ms"`
 	ErrorMessage   string                 `json:"error_message,omitempty"`
 	ResponseBody   string                 `json:"response_body,omitempty"`
 	Details        map[string]interface{} `json:"details,omitempty"`

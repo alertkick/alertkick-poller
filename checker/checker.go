@@ -44,6 +44,8 @@ func Execute(m *client.MonitorAssignment, tlsInsecure bool) *Result {
 		return performSSLCheck(m)
 	case "domain":
 		return performDomainExpiryCheck(m)
+	case "mail":
+		return performMailCheck(m)
 	default:
 		result.Success = false
 		result.ErrorMessage = "unknown monitor type: " + m.MonitorType
