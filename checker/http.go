@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"time"
 )
@@ -86,6 +87,11 @@ func performHTTPCheck(m *client.MonitorAssignment, tlsInsecure bool) *Result {
 		}
 	}
 
+	// Phase timings (DNS, connect, TLS, first byte) via httptrace; the
+	// total is anchored after the body read so it reflects full load time.
+	timings := newHTTPTimings()
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), timings.trace()))
+
 	start := time.Now()
 	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
@@ -104,6 +110,7 @@ func performHTTPCheck(m *client.MonitorAssignment, tlsInsecure bool) *Result {
 	if err == nil {
 		result.ResponseBody = string(bodyBytes)
 	}
+	result.Details = timings.details(time.Since(start))
 
 	expectedStatus := m.ExpectedStatusCode
 	if expectedStatus == 0 {
