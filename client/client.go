@@ -107,6 +107,13 @@ type MonitorAssignment struct {
 	SSLCertExpiryAlertDays   *int              `json:"ssl_cert_expiry_alert_days,omitempty"`
 	DomainExpiryAlertDays    *int              `json:"domain_expiry_alert_days,omitempty"`
 	MailRequireDmarcPolicy   string            `json:"mail_require_dmarc_policy,omitempty"`
+	McpTransport             string            `json:"mcp_transport,omitempty"`
+	McpAuthMode              string            `json:"mcp_auth_mode,omitempty"`
+	McpHeaders               map[string]string `json:"mcp_headers,omitempty"` // decrypted by the API for this check only
+	McpDriftPolicy           string            `json:"mcp_drift_policy,omitempty"`
+	McpExpectedTools         []string          `json:"mcp_expected_tools,omitempty"`
+	McpMaxTools              int               `json:"mcp_max_tools,omitempty"`
+	McpBaseline              json.RawMessage   `json:"mcp_baseline,omitempty"` // checker.MCPBaseline; hashes only
 	FailureThreshold         int               `json:"failure_threshold"`
 	Location                 string            `json:"location"`
 
