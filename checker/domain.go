@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // rdapBootstrapURL is the IANA-backed RDAP redirector: it 302s to the
@@ -63,7 +65,7 @@ func performDomainExpiryCheck(m *client.MonitorAssignment) *Result {
 		CheckedAt:   time.Now().UTC(),
 	}
 
-	domain := normalizeDomain(m.URL)
+	domain := registrableDomain(normalizeDomain(m.URL))
 	if domain == "" {
 		result.Success = false
 		result.ErrorMessage = "no domain configured"
@@ -208,6 +210,16 @@ func normalizeDomain(raw string) string {
 		d = d[:idx]
 	}
 	return strings.Trim(d, ".")
+}
+
+// registrableDomain reduces a hostname to the name the registry holds
+// (www.example.co.uk -> example.co.uk). RDAP only answers for registered
+// domains: asking for a subdomain returns 400 (.dev) or 404 (.me).
+func registrableDomain(host string) string {
+	if d, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
+		return d
+	}
+	return host
 }
 
 // fetchRDAPInfo queries RDAP and extracts the registration expiry (required
