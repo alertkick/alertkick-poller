@@ -5,7 +5,13 @@ import (
 	"time"
 )
 
-const maxResponseBodySize = 10 * 1024 // 10KB
+const maxResponseBodySize = 10 * 1024 // 10KB kept on the result
+
+// maxMatchBodySize bounds how much of an HTTP response is searched for
+// ExpectedResponseContains. Pages are routinely bigger than the 10KB excerpt
+// we keep (a status page puts its heading ~35KB in), and searching only the
+// excerpt failed every check whose string sat further down.
+const maxMatchBodySize = 1024 * 1024 // 1MB
 
 // Result is the outcome of a single check execution.
 type Result struct {
