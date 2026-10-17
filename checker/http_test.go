@@ -3,6 +3,7 @@ package checker
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"alertkick-poller/client"
@@ -75,5 +76,58 @@ func TestHTTPCheckTLSTimingRecorded(t *testing.T) {
 	}
 	if _, ok := result.Details["tls_time_ms"].(int64); !ok {
 		t.Errorf("missing tls_time_ms detail: %v", result.Details["tls_time_ms"])
+	}
+}
+
+func TestHTTPCheckMatchesStringBeyondStoredExcerpt(t *testing.T) {
+	// The expected string sits well past the 10KB excerpt kept on the
+	// result, like the heading of a CSS-heavy status page.
+	page := strings.Repeat("a", 3*maxResponseBodySize) + "All systems operational"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	want := "All systems operational"
+	m := &client.MonitorAssignment{UUID: "test-uuid", MonitorType: "http", URL: srv.URL, ExpectedResponseContains: &want}
+
+	result := performHTTPCheck(m, false)
+	if !result.Success {
+		t.Fatalf("check failed: %s", result.ErrorMessage)
+	}
+	if len(result.ResponseBody) != maxResponseBodySize {
+		t.Errorf("stored body is %d bytes, want the %d byte excerpt", len(result.ResponseBody), maxResponseBodySize)
+	}
+}
+
+func TestHTTPCheckMissingStringStillFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(strings.Repeat("a", 3*maxResponseBodySize)))
+	}))
+	defer srv.Close()
+
+	want := "All systems operational"
+	m := &client.MonitorAssignment{UUID: "test-uuid", MonitorType: "http", URL: srv.URL, ExpectedResponseContains: &want}
+
+	result := performHTTPCheck(m, false)
+	if result.Success {
+		t.Fatal("expected failure when the string is absent")
+	}
+	if !strings.Contains(result.ErrorMessage, "does not contain expected string") {
+		t.Errorf("unexpected error message: %s", result.ErrorMessage)
+	}
+}
+
+func TestHTTPCheckIgnoresStringPastMatchLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(strings.Repeat("a", maxMatchBodySize) + "needle"))
+	}))
+	defer srv.Close()
+
+	want := "needle"
+	m := &client.MonitorAssignment{UUID: "test-uuid", MonitorType: "http", URL: srv.URL, ExpectedResponseContains: &want}
+
+	if result := performHTTPCheck(m, false); result.Success {
+		t.Fatal("expected the search to stop at maxMatchBodySize")
 	}
 }

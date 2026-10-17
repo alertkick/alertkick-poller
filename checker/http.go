@@ -2,6 +2,7 @@ package checker
 
 import (
 	"alertkick-poller/client"
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -106,9 +107,9 @@ func performHTTPCheck(m *client.MonitorAssignment, tlsInsecure bool) *Result {
 
 	result.StatusCode = resp.StatusCode
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxMatchBodySize))
 	if err == nil {
-		result.ResponseBody = string(bodyBytes)
+		result.ResponseBody = string(bodyBytes[:min(len(bodyBytes), maxResponseBodySize)])
 	}
 	result.Details = timings.details(time.Since(start))
 
@@ -124,7 +125,7 @@ func performHTTPCheck(m *client.MonitorAssignment, tlsInsecure bool) *Result {
 	}
 
 	if m.ExpectedResponseContains != nil && *m.ExpectedResponseContains != "" {
-		if !strings.Contains(result.ResponseBody, *m.ExpectedResponseContains) {
+		if err != nil || !bytes.Contains(bodyBytes, []byte(*m.ExpectedResponseContains)) {
 			result.Success = false
 			result.ErrorMessage = fmt.Sprintf("response does not contain expected string: %s", *m.ExpectedResponseContains)
 			return result
